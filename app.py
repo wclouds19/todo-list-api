@@ -19,8 +19,6 @@ def register():
 
     data = request.form.to_dict() #Convert Data to JSON Format
 
-    #var_dump(data)
-
     if len(data) != 2 :
         return jsonify({'status' : 'Failed', 'message': 'Data Empty!!'})
     elif data['username'] == "" and data['password'] == "":
@@ -45,8 +43,6 @@ def register():
 def login():
     
     data = request.form.to_dict()
-
-    #var_dump(data)   
 
     if len(data) != 2 :
         return jsonify({'status' : 'Failed', 'message': 'Data Empty!!'})
@@ -80,8 +76,6 @@ def add_todo_item():
         data = request.form.to_dict()
 
         description = data['description']   #Optional Field    
-
-        #var_dump(len(data))
 
         if len(data) != 3 :
             return jsonify({'status' : 'Failed', 'message': 'Data Empty!!'})
@@ -131,7 +125,7 @@ def get_todo_list():
         todos = mongo.db['todo'].find({'user_id': user_id})   #Find All List Of Data From Todo Table
 
         if todos.collection.count_documents({}) == 0:
-            return jsonify({'status' : 'Success', 'message': 'Nothing Data to Show!!'})   
+            return jsonify({'status' : 'Success', 'message': 'Nothing Data to Show!!'}), 401   
 
         result = []
 
@@ -152,18 +146,50 @@ def get_todo_list():
 @app.route('/api/todo/update', methods=['POST'])
 def update_todo_item():
      try:
-         data = request.form.to_dict()
-         data_token = jwt.decode(data['token'], secret_key, algorithms=['HS256'], verify=True)
-         user_id = data_token['_id']
-         todo = mongo.db['todo'].find_one({'_id': ObjectId(data['todo_id']), 'user_id': user_id})
+        data = request.form.to_dict()
+        data_token = jwt.decode(data['token'], secret_key, algorithms=['HS256'], verify=True)
+        user_id = data_token['_id']
 
-         if not todo:
-             return jsonify({'message': 'Todo Item Not Found!!', 'id' :data['todo_id'], 'user_id': user_id}), 404
+        description = data['description']   #Optional Field    
+
+        if len(data) != 5 :
+            return jsonify({'status' : 'Failed', 'message': 'Data Empty!!'}), 401
+        elif data['title'] == "":
+            return jsonify({'status' : 'Failed', 'message': 'Title Must Be Filled!!'}), 401
+        elif data['description'] == "": #Optional Field
+            description = False
+        elif data['status'] == "":
+            return jsonify({'status' : 'Failed', 'message': 'Status Must Be Filled!!'}), 401    
+        elif not mongo.db['todo'].find_one({'_id': ObjectId(data['todo_id']), 'user_id': user_id}):
+            return jsonify({
+                'status' : 'failed',
+                'message': 'Todo Item Not Found!!', 
+                'id' : data['todo_id'],
+            }), 404
+        elif mongo.db['todo'].find_one({'title' : data['title']}): #Find One Match Data Title From Todo Table
+            return jsonify({
+                'status' : 'Failed', 
+                'message' : 'Title Already Exist!!'
+            }), 401    
          
-         updated_data = {'status': data['status']}
-         mongo.db['todos'].update_one({'_id': ObjectId(data['todo_id'])}, {'$set': updated_data})
+        updated_data = {
+            'title': data['title'],     
+            'description': description,
+            'status': data['status']
+        }
+         
+        mongo.db['todos'].update_one({'_id': ObjectId(data['todo_id'])}, {'$set': updated_data})
 
-         return jsonify({'message': 'Todo Item Updated Successfully!'})
+        return jsonify({
+            'status' : 'success',
+            'data' : {
+                'id' : data['todo_id'],
+                'title' : updated_data['title'],
+                'description' : updated_data['description'],
+                'status' : updated_data['status']
+            },
+            'message': 'Todo Item Updated Successfully!'
+        })
      except jwt.ExpiredSignatureError:
         return jsonify({'message': 'Expired Token!!'})   
      except jwt.InvalidTokenError:
@@ -175,14 +201,33 @@ def delete_todo_item():
         data = request.form.to_dict()
         data_token = jwt.decode(data['token'], secret_key, algorithms=['HS256'], verify=True)
         user_id = data_token['_id']
+        
+        if len(data) != 2 :
+            return jsonify({'status' : 'Failed', 'message': 'Data Empty!!'}), 401
+        elif data['todo_id'] == "":
+            return jsonify({'status' : 'Failed', 'message': 'Todo ID Must Be Filled!!'}), 401    
+
         todo = mongo.db['todo'].find_one({'_id': ObjectId(data['todo_id']), 'user_id': user_id})
 
         if not todo:
-            return jsonify({'message': 'Todo Item Not Found!'}), 404
+            return jsonify({
+                'status' : 'failed',
+                'message': 'Todo Item Not Found!!', 
+                'id' : data['todo_id'],
+            }), 404
         
         mongo.db['todo'].delete_one({'_id': ObjectId(data['todo_id'])})
         
-        return jsonify({'message': 'Todo Item Deleted Successfully!'})
+        return jsonify({
+            'status' : 'failed',
+            'data' : {
+                'id' : data['todo_id'],
+                'title' : todo['title'],
+                'description' : todo['description'],
+                'status' : todo['status']
+            },
+            'message': 'Todo Item Deleted Successfully!'
+        })
     
     except jwt.ExpiredSignatureError:
         return jsonify({'message': 'Expired Token!!'})   
